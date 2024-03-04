@@ -1,17 +1,89 @@
-# ASP.NET Core
-# Build and test ASP.NET Core projects targeting .NET Core.
-# Add steps that run tests, create a NuGet package, deploy, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/languages/dotnet-core
-
 trigger:
-- master
+- main
 
-pool:
-  vmImage: ubuntu-latest
+stages:
+- stage: Build
+  displayName: 'Build stage'
+  jobs:
+  - job: Build
+    displayName: 'Build job'
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - task: UseDotNet@2
+      inputs:
+        packageType: sdk
+        version: '3.x'
 
-variables:
-  buildConfiguration: 'Release'
+    - script: dotnet restore
+      displayName: 'dotnet restore'
 
-steps:
-- script: dotnet build --configuration $(buildConfiguration)
-  displayName: 'dotnet build $(buildConfiguration)'
+    - script: dotnet build --configuration Release
+      displayName: 'dotnet build'
+
+    - script: dotnet test --no-restore --verbosity normal
+      displayName: 'dotnet test'
+
+- stage: BuildContainers
+  displayName: 'Build Containers'
+  jobs:
+  - job: BuildContainers
+    displayName: 'Build Containers'
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - task: Docker@2
+      displayName: Login to Docker Hub
+      inputs:
+        command: login
+        containerRegistry: dockerRegistry
+    - task: Docker@2
+      displayName: Build and Push Nginx
+      inputs:
+        command: buildAndPush
+        Dockerfile: 'Dockerfile'
+        repository: shahzeb799/nginx
+        tags: |
+          build-$(Build.BuildId)
+    - task: Docker@2
+      displayName: Build and Push WebApi
+      inputs:
+        command: buildAndPush
+        buildContext: 'TestApi'
+        Dockerfile: 'TestApi/Dockerfile'
+        repository: shahzeb799/testapi
+        tags: |
+          build-$(Build.BuildId)
+# - stage: Deploy
+#   displayName: 'Deploy To Kubernetes'
+#   jobs:
+#   - job: Deploy
+#     displayName: 'Deploy To Kubernetes'
+#     pool:
+#       name: testPool
+#     steps:
+#     - script: |
+#             kubectl get deployments
+#             kubectl delete deployment nginx-deployment
+#             kubectl delete deployment webapi-deployment
+#             kubectl apply -f .\deployment.yaml
+#             kubectl apply -f .\service.yaml
+- stage: Deploy
+  displayName: 'Update Manifests'
+  jobs:
+  - job: Deploy
+    displayName: 'Update Manifests'
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - bash: |
+            git clone https://github.com/shahzeb79/Kube_Manifest_TestApi.git
+            git config --global user.email "shahzeb79@yahoo.com"
+            git config --global user.name "shahzeb"
+            cd Kube_Manifest_TestApi
+            echo $(Build.BuildId)
+            sed -i "s/build-.*/build-$(Build.BuildId)/g" manifest/deployment.yaml
+            git add .
+            git commit -m "new build with imgTag build-$(Build.BuildId)"
+            git config credential.helper 'cache --timeout=120'
+            git push -q https://$(github.token)@github.com/shahzeb79/Kube_Manifest_TestApi.git main 
