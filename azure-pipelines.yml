@@ -1,14 +1,13 @@
 trigger:
 - master
-
+pool:
+  vmImage: ubuntu-latest
 stages:
 - stage: Build
   displayName: 'Build stage'
   jobs:
   - job: Build
     displayName: 'Build job'
-    pool:
-      vmImage: ubuntu-latest
     steps:
     - task: UseDotNet@2
       inputs:
@@ -29,8 +28,6 @@ stages:
   jobs:
   - job: BuildContainers
     displayName: 'Build Containers'
-    pool:
-      vmImage: ubuntu-latest
     steps:
     - task: Docker@2
       displayName: Login to Docker Hub
@@ -73,8 +70,6 @@ stages:
   jobs:
   - job: Deploy
     displayName: 'Update Manifests'
-    pool:
-      vmImage: ubuntu-latest
     steps:
     - bash: |
             git clone https://github.com/shahzeb79/Kube_Manifest_TestApi.git
